@@ -18,6 +18,7 @@ import org.archive.util.ArchiveUtils;
 import org.archive.wayback.ReplayURIConverter;
 import org.archive.wayback.ReplayURIConverter.URLStyle;
 import org.archive.wayback.ResultURIConverter;
+import org.archive.wayback.archivalurl.ArchivalUrlReplayURIConverter;
 import org.archive.wayback.core.CaptureSearchResult;
 import org.archive.wayback.core.CaptureSearchResults;
 import org.archive.wayback.core.WaybackRequest;
@@ -351,14 +352,14 @@ public class MementoUtils implements MementoConstants {
 
 	public static String getTimegateUrl(AccessPoint ap, String url) {
 		StringBuilder sb = new StringBuilder();
-		sb.append(getTimeGatePrefix(ap));
+		sb.append(getTimeGatePrefix(ap, url));
 		sb.append(url);
 		return sb.toString();
 	}
 
 	public static String getTimemapUrl(AccessPoint ap, String format, String url) {
 		StringBuilder sb = new StringBuilder();
-		sb.append(getTimeMapPrefix(ap));
+		sb.append(getTimeMapPrefix(ap, url));
 		sb.append(TIMEMAP).append("/").append(format).append("/");
 		sb.append(url);
 		return sb.toString();
@@ -367,19 +368,19 @@ public class MementoUtils implements MementoConstants {
 	public static String getTimemapDateUrl(AccessPoint ap, String format,
 			String pagestr, String url) {
 		StringBuilder sb = new StringBuilder();
-		sb.append(getTimeMapPrefix(ap));
+		sb.append(getTimeMapPrefix(ap, url));
 		sb.append(TIMEMAP).append("/").append(format).append("/");
 		sb.append(pagestr);
 		sb.append(url);
 		return sb.toString();
 	}
 
-	public static String getTimeMapPrefix(AccessPoint ap) {
-		return getMementoPrefix(ap) + ap.getQueryPrefix();
+	public static String getTimeMapPrefix(AccessPoint ap, String url) {
+		return ensureProtocol(getMementoPrefix(ap) + ap.getQueryPrefix(), url);
 	}
 
-	public static String getTimeGatePrefix(AccessPoint ap) {
-		return getMementoPrefix(ap) + ap.getReplayPrefix();
+	public static String getTimeGatePrefix(AccessPoint ap, String url) {
+		return ensureProtocol(getMementoPrefix(ap) + ap.getReplayPrefix(), url);
 	}
 
 	public static String getMementoPrefix(AccessPoint ap) {
@@ -430,6 +431,9 @@ public class MementoUtils implements MementoConstants {
 		String timestamp = ArchiveUtils.get14DigitDate(date);
 		ResultURIConverter uriConverter = ap.getUriConverter();
 		final String replayURI;
+		if (uriConverter instanceof ArchivalUrlReplayURIConverter) {
+			((ArchivalUrlReplayURIConverter)uriConverter).setAccessPoint(ap);
+		}
 		if (uriConverter instanceof ReplayURIConverter) {
 			// leverage new interface.
 			replayURI = ((ReplayURIConverter)uriConverter).makeReplayURI(timestamp, url, null, URLStyle.ABSOLUTE);
@@ -460,5 +464,20 @@ public class MementoUtils implements MementoConstants {
 			ofi.next();
 		}
 		return nre;
+	}
+
+	private static String ensureProtocol(String prefix, String url){
+		// protocol relative URLs are non-compliant
+		// https://tools.ietf.org/html/rfc7089#section-2
+		if (prefix.startsWith("//")){
+			String urlScheme = url.substring(0, url.indexOf("//"));
+			if (urlScheme.startsWith("//")) {
+				return "http://" + prefix;
+			} else {
+				return urlScheme + prefix;
+			}
+		} else {
+			return prefix;
+		}
 	}
 }
